@@ -3,56 +3,68 @@ import { Button } from "@/components/ui/button";
 import { Product } from "@/types/product";
 import { ShoppingCart, X, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import type { Sale } from "@/types/sale";
+import { getDiscountedPrice, isSaleActive } from "@/lib/sale";
 
 interface ProductDetailProps {
   product: Product | null;
   isOpen: boolean;
   onClose: () => void;
   onAddToCart: (product: Product) => void;
+  sale?: Sale | null;
 }
 
-export const ProductDetail = ({ product, isOpen, onClose, onAddToCart }: ProductDetailProps) => {
+export const ProductDetail = ({ product, isOpen, onClose, onAddToCart, sale }: ProductDetailProps) => {
   if (!product) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl w-[95vw] sm:w-auto max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+          <DialogTitle className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
             {product.name}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-6 sm:gap-8">
           {/* Image */}
           <div className="relative rounded-2xl overflow-hidden group">
             <img
               src={product.image}
               alt={product.name}
               className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+              loading="lazy"
+              decoding="async"
             />
             {product.badge && (
-              <Badge className="absolute top-4 right-4 bg-accent text-accent-foreground">
+              <Badge className="absolute top-3 right-3 sm:top-4 sm:right-4 bg-accent text-accent-foreground">
                 {product.badge}
               </Badge>
             )}
           </div>
 
           {/* Details */}
-          <div className="space-y-6">
+          <div className="space-y-5 sm:space-y-6">
             <div>
-              <div className="text-sm text-muted-foreground uppercase tracking-wider mb-2">
+              <div className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wider mb-2">
                 {product.category}
               </div>
-              <div className="text-4xl font-bold text-primary mb-2">
-                R{product.price}
-              </div>
-              <div className="text-sm text-muted-foreground">
+              {sale && isSaleActive(sale) && (sale.type === "fixed" || sale.type === "percent") ? (
+                <div className="flex items-baseline gap-3 mb-2">
+                  <span className="text-sm line-through text-muted-foreground">R{product.price.toFixed(2)}</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-primary">R{getDiscountedPrice(product, sale).toFixed(2)}</span>
+                </div>
+              ) : (
+                <div className="text-3xl sm:text-4xl font-bold text-primary mb-2">
+                  R{product.price}
+                </div>
+              )}
+              <div className="text-xs sm:text-sm text-muted-foreground">
                 {product.size}
               </div>
             </div>
 
-            <p className="text-muted-foreground leading-relaxed">
+            <p className="text-sm sm:text-base text-muted-foreground leading-relaxed">
               {product.description}
             </p>
 
@@ -63,7 +75,7 @@ export const ProductDetail = ({ product, isOpen, onClose, onAddToCart }: Product
                   {product.benefits.map((benefit, index) => (
                     <li key={index} className="flex items-start space-x-2">
                       <Check className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                      <span className="text-muted-foreground">{benefit}</span>
+                      <span className="text-muted-foreground text-sm sm:text-base">{benefit}</span>
                     </li>
                   ))}
                 </ul>

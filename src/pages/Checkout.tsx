@@ -9,11 +9,19 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, CreditCard, Building2, Wallet, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { CartItem } from "@/types/product";
+import PaystackPop from "@paystack/inline-js";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { signInAnonymously } from "firebase/auth";
+import type { Sale } from "@/types/sale";
+import { computeSaleDiscount, getDiscountedPrice, isSaleActive } from "@/lib/sale";
+import { sendReceiptEmails } from "@/lib/sendgrid";
 
 const Checkout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const cartItems = (location.state?.cartItems as CartItem[]) || [];
+  const sale = (location.state?.sale as Sale | null) || null;
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [step, setStep] = useState<"address" | "payment">("address");
@@ -37,8 +45,32 @@ const Checkout = () => {
   });
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const deliveryFee = subtotal > 500 ? 0 : 80;
-  const total = subtotal + deliveryFee;
+  const { discount } = computeSaleDiscount(cartItems, sale);
+  const deliveryFee = subtotal < 1000 ? 60 : 0;
+  const total = subtotal - discount + deliveryFee;
+
+  const PAYSTACK_PUBLIC_KEY = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY as string | undefined;
+  const PAYSTACK_SPLIT_CODE = import.meta.env.VITE_PAYSTACK_SPLIT_CODE as string | undefined;
+  const PAYSTACK_SUBACCOUNT_CODE = import.meta.env.VITE_PAYSTACK_SUBACCOUNT_CODE as string | undefined;
+
+  const paystackConfig = {
+    reference: new Date().getTime().toString(),
+    email: addressData.email,
+    amount: Math.round(total * 100), // ZAR uses cents
+    publicKey: PAYSTACK_PUBLIC_KEY || "",
+    currency: "ZAR",
+    ...(PAYSTACK_SPLIT_CODE ? { splitCode: PAYSTACK_SPLIT_CODE, split_code: PAYSTACK_SPLIT_CODE } : {}),
+    metadata: {
+      fullName: addressData.fullName,
+      phone: addressData.phone,
+      deliveryFee,
+      subtotal,
+      discount,
+      total,
+      saleId: sale?.id || null,
+      items: cartItems.map(({ id, name, quantity, price }) => ({ id, name, quantity, price })),
+    },
+  };
 
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +114,202 @@ const Checkout = () => {
         total
       }
     });
+  };
+
+  const sendPaymentEmails = async (orderId: string) => {
+    try {
+      const receiptData = {
+        orderId,
+        customerName: addressData.fullName,
+        customerEmail: addressData.email,
+        customerPhone: addressData.phone,
+        items: cartItems.map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        subtotal,
+        discount,
+        deliveryFee,
+        total,
+        paymentMethod,
+        address: {
+          streetAddress: addressData.streetAddress,
+          city: addressData.city,
+          province: addressData.province,
+          postalCode: addressData.postalCode,
+        },
+      };
+
+      const success = await sendReceiptEmails(receiptData);
+      if (!success) {
+        toast.warning("Receipt emails could not be sent, but your order was placed.");
+      } else {
+        toast.success("Receipt sent to your email!");
+      }
+    } catch (err: any) {
+      console.error("Email send failed", err);
+      toast.warning("Receipt emails could not be sent, but your order was placed.");
+    }
+  };
+
+  const ensureAuthenticated = async () => {
+    try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
+    } catch (err) {
+      console.warn("Anonymous sign-in failed", err);
+    }
+  };
+
+  const createOrder = async (orderId: string, status: string, transaction?: any) => {
+    const payload = {
+      orderId,
+      status,
+      paymentMethod,
+      subtotal,
+      deliveryFee,
+      discount,
+      total,
+      address: { ...addressData },
+      customer: {
+        name: addressData.fullName,
+        email: addressData.email,
+        phone: addressData.phone,
+      },
+      items: cartItems.map(({ id, name, quantity, price }) => ({ id, name, quantity, price })),
+      saleId: sale?.id || null,
+      paystack: transaction
+        ? {
+            reference: transaction.reference,
+            amount: transaction.amount,
+            currency: transaction.currency || "ZAR",
+            channel: "card",
+          }
+        : null,
+      split_code: PAYSTACK_SPLIT_CODE || null,
+      subaccount: PAYSTACK_SUBACCOUNT_CODE || null,
+      createdAt: serverTimestamp(),
+    };
+    try {
+      await addDoc(collection(db, "orders"), payload);
+    } catch (err) {
+      console.error("Failed to save order", err);
+      toast.warning("Order saved locally but could not update admin dashboard.");
+    }
+  };
+
+  const handlePayment = async () => {
+    if (paymentMethod === "card") {
+      if (!addressData.email) {
+        toast.error("Please provide your email to continue");
+        return;
+      }
+      if (!PAYSTACK_PUBLIC_KEY) {
+        toast.error("Missing Paystack public key. Please set VITE_PAYSTACK_PUBLIC_KEY");
+        return;
+      }
+      setIsProcessing(true);
+      try {
+        const paystack = new PaystackPop();
+        toast.info("Starting Paystack transaction...");
+        // Fallback guard: if checkout doesn’t open within a few seconds, hint about blockers
+        const openGuard = window.setTimeout(() => {
+          toast.warning("If nothing happens, please disable pop-up/ad blockers and try again.");
+        }, 7000);
+        const txConfig: any = {
+          key: PAYSTACK_PUBLIC_KEY,
+          email: addressData.email,
+          amount: Math.round(total * 100), // ZAR amount in cents
+          // currency is optional; defaults to your Paystack account currency
+          // currency: "ZAR",
+          metadata: {
+            custom_fields: [
+              { display_name: "Customer Name", variable_name: "customer_name", value: addressData.fullName },
+              { display_name: "Phone", variable_name: "phone", value: addressData.phone },
+            ],
+            deliveryFee,
+            subtotal,
+            total,
+            items: cartItems.map(({ id, name, quantity, price }) => ({ id, name, quantity, price })),
+          },
+          onLoad: () => {
+            window.clearTimeout(openGuard);
+            toast.info("Checkout loaded, please complete your payment");
+          },
+          onSuccess: async (transaction: any) => {
+            window.clearTimeout(openGuard);
+            toast.success("Payment successful");
+            const orderId = transaction?.reference || Math.random().toString(36).substring(2, 10).toUpperCase();
+            await ensureAuthenticated();
+            await createOrder(orderId, "paid", transaction);
+            sendPaymentEmails(orderId);
+            navigate("/order-confirmation", {
+              state: {
+                orderId,
+                cartItems,
+                addressData,
+                paymentMethod,
+                subtotal,
+                deliveryFee,
+                total,
+              },
+            });
+            setIsProcessing(false);
+          },
+          onCancel: () => {
+            window.clearTimeout(openGuard);
+            setIsProcessing(false);
+            toast.info("Payment cancelled");
+          },
+          onError: (err: any) => {
+            window.clearTimeout(openGuard);
+            setIsProcessing(false);
+            console.error("Paystack load error", err);
+            toast.error(err?.message || "Could not open Paystack checkout. Try EFT or Cash on Delivery.");
+          },
+        };
+        // Prefer valid split_code; fall back to valid subaccount for split
+        const splitCode = PAYSTACK_SPLIT_CODE?.trim();
+        const subaccountCode = PAYSTACK_SUBACCOUNT_CODE?.trim();
+        if (splitCode && splitCode.startsWith("SPL_")) {
+          (txConfig as any).split_code = splitCode;
+        } else if (subaccountCode && (subaccountCode.startsWith("ACCT_") || /^[a-zA-Z0-9]+$/.test(subaccountCode))) {
+          (txConfig as any).subaccount = subaccountCode;
+        } else if (splitCode || subaccountCode) {
+          toast.warning("Payment split config looks invalid. Proceeding without split.");
+        }
+        paystack.newTransaction(txConfig);
+      } catch (err: any) {
+        toast.error(err?.message || "Payment failed");
+        setIsProcessing(false);
+      }
+    } else {
+      // EFT or Cash on Delivery
+      setIsProcessing(true);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const orderId = Math.random().toString(36).substring(2, 10).toUpperCase();
+        await ensureAuthenticated();
+        await createOrder(orderId, paymentMethod === "eft" ? "pending_eft" : "cash_on_delivery");
+        sendPaymentEmails(orderId);
+        toast.success("Order placed successfully. Redirecting to confirmation...");
+        navigate("/order-confirmation", {
+          state: {
+            orderId,
+            cartItems,
+            addressData,
+            paymentMethod,
+            subtotal,
+            deliveryFee,
+            total,
+          },
+        });
+      } finally {
+        setIsProcessing(false);
+      }
+    }
   };
 
   if (cartItems.length === 0) {
@@ -259,51 +487,10 @@ const Checkout = () => {
                   </RadioGroup>
 
                   {paymentMethod === "card" && (
-                    <div className="space-y-4 animate-fade-in">
-                      <div className="space-y-2">
-                        <Label htmlFor="cardNumber">Card Number *</Label>
-                        <Input
-                          id="cardNumber"
-                          value={cardData.cardNumber}
-                          onChange={(e) => setCardData({ ...cardData, cardNumber: e.target.value })}
-                          placeholder="1234 5678 9012 3456"
-                          maxLength={19}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="cardName">Cardholder Name *</Label>
-                        <Input
-                          id="cardName"
-                          value={cardData.cardName}
-                          onChange={(e) => setCardData({ ...cardData, cardName: e.target.value })}
-                          placeholder="John Doe"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="expiryDate">Expiry Date *</Label>
-                          <Input
-                            id="expiryDate"
-                            value={cardData.expiryDate}
-                            onChange={(e) => setCardData({ ...cardData, expiryDate: e.target.value })}
-                            placeholder="MM/YY"
-                            maxLength={5}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="cvv">CVV *</Label>
-                          <Input
-                            id="cvv"
-                            type="password"
-                            value={cardData.cvv}
-                            onChange={(e) => setCardData({ ...cardData, cvv: e.target.value })}
-                            placeholder="123"
-                            maxLength={3}
-                          />
-                        </div>
-                      </div>
+                    <div className="bg-muted p-4 rounded-lg animate-fade-in">
+                      <p className="text-sm text-muted-foreground">
+                        You'll be redirected to Paystack's secure checkout to complete your payment.
+                      </p>
                     </div>
                   )}
 
@@ -324,18 +511,21 @@ const Checkout = () => {
                   )}
 
                   <Button 
-                    type="submit" 
-                    size="lg" 
-                    className="w-full bg-gradient-to-r from-primary to-accent"
+                    type="button"
                     disabled={isProcessing}
+                    onClick={handlePayment}
+                    className="w-full"
                   >
                     {isProcessing ? (
                       <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Processing Payment...
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processing...
                       </>
                     ) : (
-                      `Place Order - R${total.toFixed(2)}`
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        {paymentMethod === "card" ? `Pay R${total.toFixed(2)}` : "Place Order"}
+                      </>
                     )}
                   </Button>
                 </form>
@@ -376,9 +566,9 @@ const Checkout = () => {
                   <span className="text-muted-foreground">Delivery Fee</span>
                   <span>{deliveryFee === 0 ? "FREE" : `R${deliveryFee.toFixed(2)}`}</span>
                 </div>
-                {subtotal > 0 && subtotal < 500 && (
+                {subtotal > 0 && subtotal < 1000 && (
                   <p className="text-xs text-muted-foreground">
-                    Spend R{(500 - subtotal).toFixed(2)} more for free delivery
+                    Spend R{(1000 - subtotal).toFixed(2)} more for free delivery
                   </p>
                 )}
                 <Separator className="my-2" />

@@ -1,5 +1,6 @@
 import { Mail, Phone, MapPin } from "lucide-react";
-import { FaFacebook, FaInstagram, FaTwitter } from "react-icons/fa";
+import { FaFacebook, FaInstagram } from "react-icons/fa";
+import { SiTiktok } from "react-icons/si";
 
 export const Footer = () => {
   return (
@@ -15,14 +16,14 @@ export const Footer = () => {
               Premium skincare formulated with natural ingredients for radiant, healthy skin.
             </p>
             <div className="flex space-x-4">
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a href="https://www.facebook.com/share/1A6qUpTTs8/?mibextid=wwXIfr" className="text-muted-foreground hover:text-primary transition-colors" target="_blank" rel="noreferrer">
                 <FaFacebook className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+              <a href="https://www.instagram.com/sibabeauty_27?igsh=czkxNnprazVicXdu&utm_source=qr" className="text-muted-foreground hover:text-primary transition-colors" target="_blank" rel="noreferrer">
                 <FaInstagram className="h-5 w-5" />
               </a>
-              <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
-                <FaTwitter className="h-5 w-5" />
+              <a href="https://www.tiktok.com/@sibabeauty_27?_r=1&_d=dm7i4232lc6dg7&sec_uid=MS4wLjABAAAAKJ7MsmhDis3twBWApXvQW_npW-MwUpIpTk-QO03s6ogLhf8dy4jQ6ogQz4HBNuic&share_author_id=7373175477207647238&sharer_language=en&source=h5_m&u_code=eea814cl2dg7d7&item_author_type=1&utm_source=copy&tt_from=copy&enable_checksum=1&utm_medium=ios&share_link_id=9C0EDB90-FAE1-4D0E-8B62-11D7D0296214&user_id=7373175477207647238&sec_user_id=MS4wLjABAAAAKJ7MsmhDis3twBWApXvQW_npW-MwUpIpTk-QO03s6ogLhf8dy4jQ6ogQz4HBNuic&social_share_type=4&ug_btm=b8727,b0&utm_campaign=client_share&share_app_id=1233" className="text-muted-foreground hover:text-primary transition-colors" target="_blank" rel="noreferrer">
+                <SiTiktok className="h-5 w-5" />
               </a>
             </div>
           </div>
@@ -74,8 +75,13 @@ export const Footer = () => {
                 </a>
               </li>
               <li>
-                <a href="#" className="text-muted-foreground hover:text-primary transition-colors">
+                <a href="/privacy-policy" className="text-muted-foreground hover:text-primary transition-colors">
                   Privacy Policy
+                </a>
+              </li>
+              <li>
+                <a href="/terms" className="text-muted-foreground hover:text-primary transition-colors">
+                  Terms & Conditions
                 </a>
               </li>
             </ul>
@@ -98,10 +104,10 @@ export const Footer = () => {
               <li className="flex items-start space-x-2">
                 <Mail className="h-4 w-4 text-primary shrink-0 mt-1" />
                 <a 
-                  href="mailto:zamasibadlamaini@gmail.com" 
+                  href="mailto:Sibabeauty27@gmail.com" 
                   className="text-muted-foreground hover:text-primary transition-colors break-all"
                 >
-                  zamasibadlamaini@gmail.com
+                  Sibabeauty27@gmail.com
                 </a>
               </li>
             </ul>

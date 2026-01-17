@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public reads for products so the shop can display catalog
+    match /products/{docId} {
+      allow read: if true;
+      // Only admin can manage products
+      allow create, update, delete: if request.auth != null && request.auth.token.email == 'sibabeauty27@gmail.com';
+    }
+
+    // Orders: customers can create, admin can read/manage
+    match /orders/{docId} {
+      // Only admin can read orders
+      allow read: if request.auth != null && request.auth.token.email == 'sibabeauty27@gmail.com';
+      // Any authenticated user can place orders
+      allow create: if request.auth != null;
+      // Only admin can modify or delete orders
+      allow update, delete: if request.auth != null && request.auth.token.email == 'sibabeauty27@gmail.com';
+    }
+
+    // Deny all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

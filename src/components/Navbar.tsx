@@ -1,6 +1,8 @@
-import { ShoppingCart, Moon, Sun, Menu, X } from "lucide-react";
+import { ShoppingCart, Moon, Sun, Menu, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import sibalogo from "@/assets/sibalogo.jpeg";
 
 interface NavbarProps {
   cartCount: number;
@@ -11,16 +13,33 @@ interface NavbarProps {
 
 export const Navbar = ({ cartCount, onCartClick, isDark, onThemeToggle }: NavbarProps) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  
+  // Lock body scroll when mobile menu is open for better mobile UX
+  useEffect(() => {
+    if (isMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMenuOpen]);
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-lg border-b border-border">
+    <nav className="fixed top-0 left-0 right-0 z-[100] bg-background/80 backdrop-blur-lg border-b border-border">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <div className="flex items-center space-x-2">
-            <div className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              SIBA BEAUTY
-            </div>
+            <a href="#home" className="inline-flex items-center">
+              <img
+                src={sibalogo}
+                alt="SIBA BEAUTY Logo"
+                className="h-12 w-12 md:h-16 md:w-16 rounded-full object-cover border border-border"
+              />
+            </a>
           </div>
 
           {/* Desktop Navigation */}
@@ -67,6 +86,16 @@ export const Navbar = ({ cartCount, onCartClick, isDark, onThemeToggle }: Navbar
             <Button
               variant="ghost"
               size="icon"
+              className="hover:bg-secondary"
+              onClick={() => navigate("/login")}
+              aria-label="Login"
+            >
+              <User className="h-5 w-5" />
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="icon"
               className="md:hidden"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
@@ -77,32 +106,32 @@ export const Navbar = ({ cartCount, onCartClick, isDark, onThemeToggle }: Navbar
 
         {/* Mobile Menu */}
         {isMenuOpen && (
-          <div className="md:hidden py-4 animate-fade-in">
-            <div className="flex flex-col space-y-4">
+          <div className="fixed inset-0 md:hidden z-[200] bg-popover text-popover-foreground border border-border shadow-xl pt-24 px-4 overflow-y-auto">
+            <div className="flex flex-col space-y-3">
               <a
                 href="#home"
-                className="text-foreground/80 hover:text-primary transition-colors"
+                className="block rounded-md px-4 py-3 text-foreground hover:bg-secondary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
               </a>
               <a
                 href="#products"
-                className="text-foreground/80 hover:text-primary transition-colors"
+                className="block rounded-md px-4 py-3 text-foreground hover:bg-secondary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Products
               </a>
               <a
                 href="#about"
-                className="text-foreground/80 hover:text-primary transition-colors"
+                className="block rounded-md px-4 py-3 text-foreground hover:bg-secondary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
               </a>
               <a
                 href="#contact"
-                className="text-foreground/80 hover:text-primary transition-colors"
+                className="block rounded-md px-4 py-3 text-foreground hover:bg-secondary transition-colors"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Contact

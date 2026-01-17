@@ -163,7 +163,7 @@ const OrderConfirmation = () => {
         <Card className="p-6 mb-8 animate-fade-in" style={{ animationDelay: "0.4s" }}>
           <h3 className="font-semibold mb-4">Estimated Delivery</h3>
           <div className="bg-primary/10 p-4 rounded-lg text-center">
-            <p className="text-lg font-semibold text-primary">3-5 Business Days</p>
+            <p className="text-lg font-semibold text-primary">3 to 5 Business Days</p>
             <p className="text-sm text-muted-foreground mt-1">
               You will receive tracking information via email
             </p>

@@ -12,3 +12,9 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# Disallow crawling of Firebase hosting cache artifacts
+Disallow: /.firebase/
+
+# Sitemap placeholder (add real sitemap if available)
+Sitemap: https://sibabeauty-edd87.web.app/sitemap.xml

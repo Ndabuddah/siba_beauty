@@ -6,9 +6,12 @@ import { ProductDetail } from "@/components/ProductDetail";
 import { ShoppingCart } from "@/components/ShoppingCart";
 import { Footer } from "@/components/Footer";
 import { Product, CartItem } from "@/types/product";
-import { products } from "@/data/products";
+import { db } from "@/lib/firebase";
+import { collection, getDocs } from "firebase/firestore";
 import { toast } from "sonner";
 import { Sparkles, Heart, Shield } from "lucide-react";
+import type { Sale } from "@/types/sale";
+import { isSaleActive } from "@/lib/sale";
 
 const Index = () => {
   const [isDark, setIsDark] = useState(false);
@@ -16,6 +19,9 @@ const Index = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [activeSale, setActiveSale] = useState<Sale | null>(null);
 
   useEffect(() => {
     if (isDark) {
@@ -24,6 +30,28 @@ const Index = () => {
       document.documentElement.classList.remove("dark");
     }
   }, [isDark]);
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoadingProducts(true);
+      try {
+        const snap = await getDocs(collection(db, "products"));
+        const list = snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as Omit<Product, "id">) }));
+        setProductsList(list);
+        // Fetch sales and pick an active one (first active)
+        const saleSnap = await getDocs(collection(db, "sales"));
+        const salesList = saleSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Sale, "id">) }));
+        const active = salesList.find(isSaleActive) || null;
+        setActiveSale(active);
+      } catch (err: any) {
+        console.error(err);
+        toast.error("Failed to load products/sales");
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   const handleAddToCart = (product: Product) => {
     setCartItems((prev) => {
@@ -57,10 +85,14 @@ const Index = () => {
     toast.success("Item removed from cart");
   };
 
-  const categories = ["All", ...Array.from(new Set(products.map((p) => p.category)))];
-  const filteredProducts = selectedCategory === "All" 
-    ? products 
-    : products.filter((p) => p.category === selectedCategory);
+  const categories = [
+    "All",
+    ...Array.from(new Set(productsList.map((p) => p.category)))
+  ];
+  const filteredProducts =
+    selectedCategory === "All"
+      ? productsList
+      : productsList.filter((p) => p.category === selectedCategory);
 
   return (
     <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
@@ -112,23 +144,23 @@ const Index = () => {
       <section id="products" className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12 space-y-4 animate-fade-in-up">
-            <h2 className="text-4xl md:text-5xl font-bold">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
               <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
                 Our Products
               </span>
             </h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
               Discover our collection of premium skincare products
             </p>
           </div>
 
           {/* Category Filter */}
-          <div className="flex flex-wrap justify-center gap-3 mb-12">
+          <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-12">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-6 py-2 rounded-full transition-all duration-300 ${
+                className={`px-4 sm:px-6 py-2 text-sm sm:text-base rounded-full transition-all duration-300 ${
                   selectedCategory === category
                     ? "bg-gradient-to-r from-primary to-accent text-white shadow-lg"
                     : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
@@ -139,20 +171,37 @@ const Index = () => {
             ))}
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredProducts.map((product, index) => (
-              <div
-                key={product.id}
-                className="animate-fade-in-up"
-                style={{ animationDelay: `${index * 0.1}s` }}
-              >
-                <ProductCard
-                  product={product}
-                  onAddToCart={handleAddToCart}
-                  onViewDetails={setSelectedProduct}
-                />
+          <div className="grid sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+            {loadingProducts ? (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="animate-pulse">
+                  <div className="h-48 bg-secondary rounded-xl mb-4" />
+                  <div className="h-4 bg-secondary rounded w-3/4 mb-2" />
+                  <div className="h-4 bg-secondary rounded w-1/2" />
+                </div>
+              ))
+            ) : filteredProducts.length === 0 ? (
+              <div className="col-span-full text-center py-12">
+                <h3 className="text-xl font-semibold">No products found</h3>
+                <p className="text-muted-foreground mt-2">Please check back later or try a different category.</p>
               </div>
-            ))}
+            ) : (
+              filteredProducts.map((product, index) => (
+                <div
+                  key={product.id}
+                  className="animate-fade-in-up"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <ProductCard
+                    product={product}
+                    onAddToCart={handleAddToCart}
+                    onViewDetails={setSelectedProduct}
+                    // pass sale for price display
+                    sale={activeSale || null}
+                  />
+                </div>
+              ))
+            )}
           </div>
         </div>
       </section>
@@ -161,11 +210,28 @@ const Index = () => {
       <section id="about" className="py-20 bg-secondary/30">
         <div className="container mx-auto px-4">
           <div className="max-w-3xl mx-auto text-center space-y-6 animate-fade-in-up">
-            <h2 className="text-4xl md:text-5xl font-bold">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold">
               <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                About SiBA BEAUTY
+                About SIBA Beauty
               </span>
             </h2>
+            <p className="text-base sm:text-lg text-muted-foreground">
+              Transform your skin, transform your life! At Siba Beauty, we're passionate about helping you unlock your natural glow and confidence. Our carefully crafted products address a range of skincare concerns, including:
+            </p>
+            <ul className="text-lg text-muted-foreground leading-relaxed space-y-2">
+              <li>Acne & Blemishes</li>
+              <li>Hyperpigmentation & Dark Spots</li>
+              <li>Fine Lines & Wrinkles</li>
+              <li>Dryness & Dehydration</li>
+              <li>Uneven Skin Tone & Texture</li>
+              <li>Sensitive Skin & Irritation</li>
+            </ul>
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              Our products are designed for all skin types and tones, and are suitable for both women and men. Whether you're looking to address specific skin issues or simply want to maintain healthy, radiant skin, we've got you covered.
+            </p>
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              With Siba Beauty, you can say goodbye to skin worries and hello to a more confident, beautiful you!
+            </p>
             <p className="text-lg text-muted-foreground leading-relaxed">
               Based in South Africa, SiBA BEAUTY is dedicated to providing premium skincare 
               solutions that celebrate natural beauty. Our products are formulated with 
@@ -206,10 +272,10 @@ const Index = () => {
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Email</p>
                 <a 
-                  href="mailto:zamasibadlamaini@gmail.com"
+                  href="mailto:Sibabeauty27@gmail.com"
                   className="text-xl font-semibold text-primary hover:text-accent transition-colors break-all"
                 >
-                  zamasibadlamaini@gmail.com
+                  Sibabeauty27@gmail.com
                 </a>
               </div>
               <div className="space-y-2">
@@ -228,6 +294,7 @@ const Index = () => {
         isOpen={!!selectedProduct}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={handleAddToCart}
+        sale={activeSale || null}
       />
 
       <ShoppingCart
@@ -236,6 +303,7 @@ const Index = () => {
         items={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
         onRemoveItem={handleRemoveItem}
+        sale={activeSale || null}
       />
     </div>
   );

@@ -6,6 +6,7 @@ export interface Product {
   image: string;
   category: string;
   size: string;
+  stock?: number; // inventory quantity
   badge?: string;
   ingredients?: string[];
   benefits?: string[];
